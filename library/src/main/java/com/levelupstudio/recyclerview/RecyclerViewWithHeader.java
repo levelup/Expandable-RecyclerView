@@ -127,6 +127,40 @@ public class RecyclerViewWithHeader extends RecyclerView {
 		return 0;
 	}
 
+	/**
+	 * Check if this view can be scrolled horizontally in a certain direction.
+	 *
+	 * @param direction Negative to check scrolling left, positive to check scrolling right.
+	 * @return true if this view can be scrolled in the specified direction, false otherwise.
+	 */
+	public boolean canScrollHorizontally(int direction) {
+		final int offset = computeHorizontalScrollOffset();
+		final int range = computeHorizontalScrollRange() - computeHorizontalScrollExtent();
+		if (range == 0) return false;
+		if (direction < 0) {
+			return offset > 0;
+		} else {
+			return offset < range - 1;
+		}
+	}
+
+	/**
+	 * Check if this view can be scrolled vertically in a certain direction.
+	 *
+	 * @param direction Negative to check scrolling up, positive to check scrolling down.
+	 * @return true if this view can be scrolled in the specified direction, false otherwise.
+	 */
+	public boolean canScrollVertically(int direction) {
+		final int offset = computeVerticalScrollOffset();
+		final int range = computeVerticalScrollRange() - computeVerticalScrollExtent();
+		if (range == 0) return false;
+		if (direction < 0) {
+			return offset > 0;
+		} else {
+			return offset < range - 1;
+		}
+	}
+
 	@Override
 	public int computeVerticalScrollExtent() {
 		return super.computeVerticalScrollExtent();
