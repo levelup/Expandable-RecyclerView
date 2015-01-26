@@ -1,0 +1,4 @@
+// You need to put this in your <root>/settings.gradle and adapt the folder location
+
+include 'library'
+project(':library').projectDir = new File('library')
