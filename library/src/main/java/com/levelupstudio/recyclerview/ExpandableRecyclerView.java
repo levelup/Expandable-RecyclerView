@@ -6,6 +6,7 @@ import android.os.Parcelable;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.util.DebugUtils;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.LinearLayoutManager;
@@ -27,11 +28,14 @@ import android.widget.ExpandableListView;
  */
 public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 
+	private static final String ANIM_TAG = "Animator";
+	private static final boolean DEBUG_ANIMATOR = false;
+
 	private ExpandableListView.OnGroupExpandListener onGroupExpandListener;
 	private ExpandableListView.OnGroupCollapseListener onGroupCollapseListener;
 	private OnGroupClickListener onGroupClickListener;
 	/** {@link android.support.v7.widget.RecyclerView.ItemAnimator} used for normal operations */
-	private ItemAnimator mNormalItemAnimator;
+	private ItemAnimator mUserItemAnimator;
 
 	private int selectedGroup = RecyclerView.NO_POSITION;
 	private Parcelable selectedStableId;
@@ -673,7 +677,8 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	}
 
 	private void init() {
-		mNormalItemAnimator = super.getItemAnimator();
+		mUserItemAnimator = super.getItemAnimator();
+		if (DEBUG_ANIMATOR) Log.d(ANIM_TAG, "init user animator to "+ mUserItemAnimator);
 	}
 
 	@Override
@@ -734,7 +739,7 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	 */
 	@Override
 	public ItemAnimator getItemAnimator() {
-		return mNormalItemAnimator;
+		return mUserItemAnimator;
 	}
 
 	/**
@@ -743,22 +748,28 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	 */
 	@Override
 	public void setItemAnimator(final ItemAnimator animator) {
-		if (super.getItemAnimator() == mNormalItemAnimator) {
+		if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "setItemAnimator to " + animator + " mUserItemAnimator=" + mUserItemAnimator);
+		if (super.getItemAnimator() == mUserItemAnimator) {
+			if (DEBUG_ANIMATOR) Log.d(ANIM_TAG, " change user animator");
 			super.setItemAnimator(animator);
 		}
-		mNormalItemAnimator = animator;
+		mUserItemAnimator = animator;
 	}
 
 	private void expandAndCollapse(final int expandPosition, final int collapsePosition) {
 		if (ExpandableAdapter.DEBUG) Log.d(ExpandableAdapter.LOG_TAG, "expandAndCollapse "+expandPosition+'/'+collapsePosition+" currentAnimator="+super.getItemAnimator());
 
-		if (super.getItemAnimator() != null) {
+		final ItemAnimator currentItemAnimator = super.getItemAnimator();
+		if (DEBUG_ANIMATOR) Log.d(ANIM_TAG, "expandAndCollapse("+expandPosition+','+collapsePosition+") with current animator="+currentItemAnimator+" isRunning="+(currentItemAnimator !=null && currentItemAnimator.isRunning())+" mUserItemAnimator=" + mUserItemAnimator);
+		if (currentItemAnimator != null) {
 			// wait until that ItemAnimator has finished processing its queue to go on with ours
 
-			super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
+			currentItemAnimator.isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
-					ExpandableRecyclerView.super.setItemAnimator(new ExpandAndCollapseItemAnimator(expandPosition, collapsePosition));
+					ExpandAndCollapseItemAnimator expandAnimator = new ExpandAndCollapseItemAnimator(expandPosition, collapsePosition);
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before expandAndCollapse with current animator="+currentItemAnimator+" finished (running="+currentItemAnimator.isRunning()+"), use expand ItemAnimator="+expandAnimator);
+					ExpandableRecyclerView.super.setItemAnimator(expandAnimator);
 					doExpandAndCollapse(expandPosition, collapsePosition);
 				}
 			});
@@ -807,6 +818,7 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 					ExpandableRecyclerView.super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 						@Override
 						public void onAnimationsFinished() {
+							if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation to expand finished, do scroll if needed");
 							if (getExpandableAdapter()==null)
 								return;
 
@@ -836,7 +848,8 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 								}
 							}
 
-							ExpandableRecyclerView.super.setItemAnimator(mNormalItemAnimator);
+							if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation finished set back mUserItemAnimator=" + mUserItemAnimator);
+							ExpandableRecyclerView.super.setItemAnimator(mUserItemAnimator);
 						}
 					});
 				}
@@ -899,10 +912,13 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	 */
 	public void setSelectedGroup(final int groupPosition) {
 		if (ExpandableAdapter.DEBUG) Log.v(ExpandableAdapter.LOG_TAG, "setSelectedGroup("+groupPosition+')');
+		final ItemAnimator currentItemAnimator = super.getItemAnimator();
+		if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "setSelectedGroup current animator="+currentItemAnimator);
 		if (super.getItemAnimator() != null) {
 			super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before selectGroup finished, do item selection");
 					doSetSelectedGroup(groupPosition);
 				}
 			});
@@ -948,17 +964,21 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	}
 
 	private void changeRange(final int groupPosition, final int childCount) {
-		if (super.getItemAnimator() == mNormalItemAnimator) {
+		if (super.getItemAnimator() == mUserItemAnimator) {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "changeRange with current animator mUserItemAnimator=" + mUserItemAnimator);
 			getAdapter().notifyItemRangeChanged(groupPosition + getHeaderViewsCount(), childCount);
 		} else if (super.getItemAnimator() == null) {
-			super.setItemAnimator(mNormalItemAnimator);
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "changeRange with no current animator mUserItemAnimator=" + mUserItemAnimator);
+			super.setItemAnimator(mUserItemAnimator);
 			getAdapter().notifyItemRangeChanged(groupPosition + getHeaderViewsCount(), childCount);
 		} else {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "changeRange with current custom animator " + super.getItemAnimator()+" isRunning="+super.getItemAnimator().isRunning());
 			super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
-					if (ExpandableRecyclerView.super.getItemAnimator() != mNormalItemAnimator) {
-						ExpandableRecyclerView.super.setItemAnimator(mNormalItemAnimator);
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before changeRange finished set mUserItemAnimator");
+					if (ExpandableRecyclerView.super.getItemAnimator() != mUserItemAnimator) {
+						ExpandableRecyclerView.super.setItemAnimator(mUserItemAnimator);
 					}
 					changeRange(groupPosition, childCount);
 				}
@@ -967,17 +987,21 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	}
 
 	private void insertRange(final int groupPosition, final int childCount) {
-		if (super.getItemAnimator() == mNormalItemAnimator) {
+		if (super.getItemAnimator() == mUserItemAnimator) {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "insertRange with current animator mUserItemAnimator=" + mUserItemAnimator);
 			getAdapter().notifyItemRangeInserted(groupPosition + getHeaderViewsCount(), childCount);
 		} else if (super.getItemAnimator() == null) {
-			super.setItemAnimator(mNormalItemAnimator);
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "insertRange with no current animator mUserItemAnimator=" + mUserItemAnimator);
+			super.setItemAnimator(mUserItemAnimator);
 			getAdapter().notifyItemRangeInserted(groupPosition + getHeaderViewsCount(), childCount);
 		} else {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "insertRange with current custom animator " + super.getItemAnimator()+" isRunning="+super.getItemAnimator().isRunning());
 			super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
-					if (ExpandableRecyclerView.super.getItemAnimator() != mNormalItemAnimator) {
-						ExpandableRecyclerView.super.setItemAnimator(mNormalItemAnimator);
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before insertRange finished set mUserItemAnimator");
+					if (ExpandableRecyclerView.super.getItemAnimator() != mUserItemAnimator) {
+						ExpandableRecyclerView.super.setItemAnimator(mUserItemAnimator);
 					}
 					insertRange(groupPosition, childCount);
 				}
@@ -986,17 +1010,21 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	}
 
 	private void removeRange(final int groupPosition, final int childCount) {
-		if (super.getItemAnimator() == mNormalItemAnimator) {
+		if (super.getItemAnimator() == mUserItemAnimator) {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "removeRange with current animator mUserItemAnimator=" + mUserItemAnimator);
 			getAdapter().notifyItemRangeRemoved(groupPosition + getHeaderViewsCount(), childCount);
 		} else if (super.getItemAnimator() == null) {
-			super.setItemAnimator(mNormalItemAnimator);
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "removeRange with no current animator mUserItemAnimator=" + mUserItemAnimator);
+			super.setItemAnimator(mUserItemAnimator);
 			getAdapter().notifyItemRangeRemoved(groupPosition + getHeaderViewsCount(), childCount);
 		} else {
+			if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "removeRange with current custom animator " + super.getItemAnimator()+" isRunning="+super.getItemAnimator().isRunning());
 			super.getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
-					if (ExpandableRecyclerView.super.getItemAnimator() != mNormalItemAnimator) {
-						ExpandableRecyclerView.super.setItemAnimator(mNormalItemAnimator);
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before removeRange finished set mUserItemAnimator");
+					if (ExpandableRecyclerView.super.getItemAnimator() != mUserItemAnimator) {
+						ExpandableRecyclerView.super.setItemAnimator(mUserItemAnimator);
 					}
 					removeRange(groupPosition, childCount);
 				}
@@ -1020,13 +1048,16 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 	 * Refresh all the displayed items (rebind the data to update the content)
 	 */
 	public void refreshDisplay() {
-		if (getItemAnimator() == null) {
+		final ItemAnimator currentItemAnimator = getItemAnimator();
+		if (DEBUG_ANIMATOR) Log.d(ANIM_TAG, "refreshDisplay current animator=" + currentItemAnimator + " running="+(currentItemAnimator!=null && currentItemAnimator.isRunning()));
+		if (currentItemAnimator == null) {
 			removeCallbacks(refreshDisplay);
 			post(refreshDisplay);
 		} else {
-			getItemAnimator().isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
+			currentItemAnimator.isRunning(new ItemAnimator.ItemAnimatorFinishedListener() {
 				@Override
 				public void onAnimationsFinished() {
+					if (DEBUG_ANIMATOR) Log.i(ANIM_TAG, "animation before refreshDisplay with current animator=" + currentItemAnimator + " finished, do refresh");
 					removeCallbacks(refreshDisplay);
 					post(refreshDisplay);
 				}
@@ -1054,6 +1085,7 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 
 		@Override
 		public void onRemoveFinished(ViewHolder item) {
+			if (DEBUG_ANIMATOR) Log.v(ANIM_TAG, this + " onRemoveFinished finished item=" + item+ " isRunning="+isRunning());
 			super.onRemoveFinished(item);
 
 			// TODO even when the element was not shown
@@ -1067,9 +1099,12 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 					collapseListenerCalled = true;
 				}
 			}
+			if (DEBUG_ANIMATOR) Log.v(ANIM_TAG, this + " onRemoveFinished finished item=" + item+ " isRunning="+isRunning());
 		}
+
 		@Override
 		public void onAddFinished(ViewHolder item) {
+			if (DEBUG_ANIMATOR) Log.v(ANIM_TAG, this + " onAddFinished finished item=" + item+ " isRunning="+isRunning());
 			super.onAddFinished(item);
 
 			// TODO even when the element was not shown
@@ -1083,6 +1118,24 @@ public class ExpandableRecyclerView extends RecyclerViewWithHeader {
 					expandListenerCalled = true;
 				}
 			}
+			if (DEBUG_ANIMATOR) Log.v(ANIM_TAG, this + " onAddFinished finished item=" + item+ " isRunning="+isRunning());
+		}
+
+		@Override
+		public boolean isRunning() {
+			return (!collapseListenerCalled || !expandListenerCalled) && super.isRunning();
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder sb = new StringBuilder();
+			DebugUtils.buildShortClassTag(this, sb);
+			sb.append(" expandPosition=");
+			sb.append(expandPosition);
+			sb.append(" collapsePosition=");
+			sb.append(collapsePosition);
+			sb.append('}');
+			return sb.toString();
 		}
 	}
 
