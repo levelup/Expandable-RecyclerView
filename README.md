@@ -3,7 +3,7 @@ A RecyclerView that behaves like an ExpandableListView, also includes a Recycler
 
 ### Download
 
-Download [the latest JAR][1] or grab via Maven:
+Download the latest AAR via Maven:
 ```xml
 <dependency>
   <groupId>com.levelupstudio</groupId>
@@ -31,5 +31,3 @@ License
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     See the License for the specific language governing permissions and
     limitations under the License.
-
-[1]: https://search.maven.org/remote_content?g=com.levelupstudio&a=expandable-recyclerview&v=LATEST
